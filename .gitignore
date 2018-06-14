@@ -111,3 +111,5 @@ doc/_build
 
 asab
 
+# Oauth2
+client_secret.json
