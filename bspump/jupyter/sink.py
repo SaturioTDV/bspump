@@ -13,7 +13,7 @@ class JupyterSink(Sink):
 	you need to copy notebook's connection file from jupyter's server to bspump's server
 	and change ip address inside connection file to jupyter's server address.
 
-	You can find location of  connection file of running jupyter instance
+	You can find location of  connection file of running jupyter's instance
 	by running these 2 lines in python:
 
 	from jupyter_client import find_connection_file

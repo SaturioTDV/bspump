@@ -2,7 +2,6 @@
 import logging
 import bspump
 import bspump.elasticsearch
-import bspump.file
 import bspump.jupyter
 import bspump.trigger
 
