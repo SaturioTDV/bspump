@@ -1,7 +1,6 @@
 import time
 import logging
 import numpy as np
-import copy
 
 import asab
 
@@ -28,7 +27,10 @@ class SessionAnalyzer(Analyzer):
 		if len(self.CellNames) != len(self.CellFormats):
 			raise RuntimeError("Cell names and cell formats should be the same length!")
 
-		self.CellNames.append("@timestamp")
+		self.CellNames.append("@timestamp_start")
+		self.CellFormats.append('u') #unsigned integer for timestamp
+
+		self.CellNames.append("@timestamp_end")
 		self.CellFormats.append('u') #unsigned integer for timestamp
 		self._initialize_sessions()
 		
@@ -37,25 +39,26 @@ class SessionAnalyzer(Analyzer):
 		self.Sessions = np.zeros(0, dtype={'names': self.CellNames, 'formats': self.CellFormats})
 		self.RowMap = {}
 		self.RevRowMap = {}
-		self.DeactivatedRows = set()
+		self.ClosedRows = set()
 
 
 	def add_session(self, session_id, start_time):
 		row = np.zeros(1, dtype={'names': self.CellNames, 'formats': self.CellFormats})
-		row["@timestamp"] = start_time
+		row["@timestamp_start"] = start_time
 		self.Sessions = np.append(self.Sessions, row) #discussable, we can preassign big matrix and then fill it untill end and then restructure
 		row_counter = len(self.RowMap)
 		self.RowMap[session_id] = row_counter
 		self.RevRowMap[row_counter] = session_id
 
 
-	def deactivate_session(self, session_id):
+	def close_session(self, session_id, end_time):
 		row_counter = self.RowMap.get(session_id)
 		
 		if row_counter is None:
 			return
 		else:
-			self.DeactivatedRows.add(row_counter)
+			self.Sessions[session_id]['@timestamp_end'] = end_time
+			self.ClosedRows.add(row_counter)
 
 
 	def rebuild_sessions(self, mode):
@@ -68,7 +71,7 @@ class SessionAnalyzer(Analyzer):
 			saved_indexes = []
 			for key in self.RowMap.keys():
 				value = self.RowMap[key]
-				if value not in self.DeactivatedRows:
+				if value not in self.ClosedRows:
 					new_row_map[key] = value
 					new_rev_row_map[value] = key
 					saved_indexes.append(value)
@@ -77,7 +80,7 @@ class SessionAnalyzer(Analyzer):
 			self.Sessions = new_sessions
 			self.RowMap = new_row_map
 			self.RevRowMap = new_rev_row_map
-			self.DeactivatedRows = set()
+			self.ClosedRows = set()
 
 		else:
 			L.warn("Unknown mode")
