@@ -73,7 +73,8 @@ class SessionAnalyzer(Analyzer):
 		if row_counter is None:
 			return
 		else:
-			self.Sessions[session_id]['@timestamp_end'] = end_time
+			idx = self.RowMap[session_id]
+			self.Sessions[idx]['@timestamp_end'] = end_time
 			self.ClosedRows.add(row_counter)
 
 
