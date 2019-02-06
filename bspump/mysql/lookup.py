@@ -2,17 +2,17 @@ import abc
 
 from ..abc.lookup import MappingLookup
 
-class MongoDBLookup(MappingLookup):
+class MySQLLookup(MappingLookup):
 
 	'''
-The lookup that is linked with a MongoDB.
+The lookup that is linked with a MySQL.
 It provides a mapping (dictionary-like) interface to pipelines.
 It feeds lookup data from MongoDB using a query.
 It also has a simple cache to reduce a number of datbase hits.
 
 Example:
 
-class ProjectLookup(bspump.mongodb.MongoDBLookup):
+class ProjectLookup(bspump.mysql.MySQLLookup):
 
 	async def count(self, database):
 		return await database['projects'].count_documents({})
@@ -24,34 +24,40 @@ class ProjectLookup(bspump.mongodb.MongoDBLookup):
 
 	ConfigDefaults = {
 		'database': '', # Specify a database if you want to overload the connection setting
-		'collection':'', # Specify collection name
 		'key':'' # Specify key name used for search
 	}
 
-	def __init__(self, app, lookup_id, mongodb_connection, config=None):
+	def __init__(self, app, lookup_id, mysql_connection, config=None):
 		super().__init__(app, lookup_id=lookup_id, config=config)
-		self.Connection = mongodb_connection
+		self.Connection = mysql_connection
 
 		self.Database = self.Config['database']
-		self.Collection = self.Config['collection']
-		self.Key =  self.Config['key']
-		
+		self.Key = self.Config['key']
+
 		if len(self.Database) == 0:
 			self.Database = self.Connection.Database
 
 		self.Count = -1
 		self.Cache = {}
 
+		self.Cursor = self.Connection.acquire().cursor()
+
 		metrics_service = app.get_service('asab.MetricsService')
-		self.CacheCounter = metrics_service.create_counter("mongodb.lookup", tags={}, init_values={'hit': 0, 'miss': 0})
+		self.CacheCounter = metrics_service.create_counter("mysql.lookup", tags={}, init_values={'hit': 0, 'miss': 0})
 
 
 	def _find_one(self, database, key):
-		return database[self.Collection].find_one({self.Key:key})
+		# sync, easy
+		# query = "SELECT * "
+		return database[self.Config['collection']].find_one({self.Config['key']:key})
 
 	
 	async def _count(self, database):
-		return await database[self.Collection].count_documents({})
+
+		query = """SELECT COUNT(*) as "Number of Rows" FROM {};""".format(self.Database)
+		await cur.execute(query)
+		count = await cur.fetchone()[0] #??????S
+		return count
 
 
 	async def load(self):
@@ -66,25 +72,16 @@ class ProjectLookup(bspump.mongodb.MongoDBLookup):
 		try:
 			value = self.Cache[key]
 			self.CacheCounter.add('hit', 1)
-			return value
+			return key
 		except KeyError:
 			database = self.Connection.Client[self.Database].delegate
 			v = self._find_one(database, key)
-			if v is not None:
-				self.Cache[key] = v
+			self.Cache[key] = v
 			self.CacheCounter.add('miss', 1)
 			return v
 
 
 	def __iter__(self):
 		database = self.Connection.Client[self.Database].delegate
-		self.Iterator = database[self.Collection].find()
-		return self
-
-	def __next__(self):
-		element = self.Iterator.next()
-		key = element.get(self.Key)
-		if key is not None:
-			self.Cache[key] = element
-		return key
-
+		collection = self.Config['collection']
+		return database[collection].find().__iter__()

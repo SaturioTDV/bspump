@@ -29,9 +29,9 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 		'scroll_timeout': '1m',
 	}
 
-	def __init__(self, app, lookup_id, connection, config=None):
+	def __init__(self, app, lookup_id, es_connection, config=None):
 		super().__init__(app, lookup_id=lookup_id, config=config)
-		self.Connection = pipeline.locate_connection(app, connection)
+		self.Connection = es_connection
 
 		self.Index = self.Config['index']
 		self.ScrollTimeout = self.Config['scroll_timeout']
@@ -55,11 +55,11 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 		
 		response = requests.post(url+"/_search", json=request)
 		data = json.loads(response.text)
-		hit = []
+		hit = None
 		try:
 			hit = data['hits']['hits'][0]
 		except KeyError():
-			return None
+			pass
 
 		return hit
 
@@ -100,9 +100,9 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 	def __getitem__(self, key):
 		try:
-			key = self.Cache[key]
+			value = self.Cache[key]
 			self.CacheCounter.add('hit', 1)
-			return key
+			return value
 		except KeyError:
 			v = self._find_one(key)
 			self.Cache[key] = v
@@ -111,42 +111,42 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 
 	def __iter__(self):
-		# it will be soooooooo slow
-		scroll_id = None
-		request = {
-			"query": {
-				"match_all":{}
-			}
-		}
+		# TODO: bug!
+		# scroll_id = None
+		# request = {
+		# 	"query": {
+		# 		"match_all":{}
+		# 	}
+		# }
 
-		all_hits = {}
-		while True:
-			if scroll_id is None:
-				path = '{}/_search?scroll={}'.format(self.Index, self.ScrollTimeout)
-				request_body = request
-			else:
-				path = "_search/scroll"
-				request_body = {"scroll": self.ScrollTimeout, "scroll_id": scroll_id}
+		# all_hits = {}
+		# while True:
+		# 	if scroll_id is None:
+		# 		path = '{}/_search?scroll={}'.format(self.Index, self.ScrollTimeout)
+		# 		request_body = request
+		# 	else:
+		# 		path = "_search/scroll"
+		# 		request_body = {"scroll": self.ScrollTimeout, "scroll_id": scroll_id}
 
-			url = self.Connection.get_url() + path
-			response = requests.post(url+"/_search", json=request)
-			if response.status != 200:
-				data = response.text()
-				L.error("Failed to fetch data from ElasticSearch: {} from {}\n{}".format(response.status, url, data))
-				break
-			data = json.loads(response.text)
+		# 	url = self.Connection.get_url() + path
+		# 	response = requests.post(url+"/_search", json=request)
+		# 	if response.status != 200:
+		# 		data = response.text()
+		# 		L.error("Failed to fetch data from ElasticSearch: {} from {}\n{}".format(response.status, url, data))
+		# 		break
+		# 	data = json.loads(response.text)
 
-			scroll_id = msg.get('_scroll_id')
+		# 	scroll_id = msg.get('_scroll_id')
 			
-			if scroll_id is None:
-				break
+		# 	if scroll_id is None:
+		# 		break
 
-			hits = msg['hits']['hits']
+		# 	hits = msg['hits']['hits']
 			
-			if len(hits) == 0:
-				break
+		# 	if len(hits) == 0:
+		# 		break
 			
-			all_hits.update(hits)
+		# 	all_hits.update(hits)
 
 
-		return all_hits.__iter__()
+		# return all_hits.__iter__()

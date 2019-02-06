@@ -2,7 +2,7 @@ from bspump.mongodb import MongoDBLookup, MongoDBConnection
 
 from bspump.file import FileCSVSource
 from bspump.trigger import OpportunisticTrigger
-from bspump.common import PPrintSink
+from bspump.common import PPrintSink, NullSink
 from bspump import BSPumpApplication, Pipeline, Processor
 import logging
 import bspump.common
@@ -42,6 +42,8 @@ class MyPipeline(Pipeline):
 				).on(OpportunisticTrigger(app)),
 			MyProcessor(app, self), 
 			PPrintSink(app, self)
+			# NullSink(app, self)
+
 		)
 
 
@@ -51,7 +53,6 @@ class MyProcessor(Processor):
 		super().__init__(app, pipeline, id, config)
 		svc = app.get_service("bspump.PumpService")
 		self.Lookup = svc.locate_lookup("MongoDBLookup")
-
 	
 	def process(self, context, event):
 		if 'user' not in event:
