@@ -154,7 +154,7 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 
 	def __next__(self):
-		element = self.Iterator.next()
+		element = next(self.Iterator)
 		key = element.get(self.Key)
 		if key is not None:
 			self.Cache[key] = element

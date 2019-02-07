@@ -1,6 +1,8 @@
 import abc
 
 from ..abc.lookup import MappingLookup
+import aiomysql.cursors
+import pymysql.cursors
 
 class MySQLLookup(MappingLookup):
 
@@ -23,7 +25,7 @@ class ProjectLookup(bspump.mysql.MySQLLookup):
 	'''
 
 	ConfigDefaults = {
-		'database': '', # Specify a database if you want to overload the connection setting
+		'table': '', # Specify a database if you want to overload the connection setting
 		'key':'' # Specify key name used for search
 	}
 
@@ -31,7 +33,7 @@ class ProjectLookup(bspump.mysql.MySQLLookup):
 		super().__init__(app, lookup_id=lookup_id, config=config)
 		self.Connection = mysql_connection
 
-		self.Database = self.Config['database']
+		self.Table = self.Config['table']
 		self.Key = self.Config['key']
 
 		if len(self.Database) == 0:
@@ -40,24 +42,28 @@ class ProjectLookup(bspump.mysql.MySQLLookup):
 		self.Count = -1
 		self.Cache = {}
 
-		self.Cursor = self.Connection.acquire().cursor()
+		self.CursorSync = self.Connection.acquire().cursor(aiomysql.cursors.DictCursor)
+		self.CursorAsync = self.Connection.acquire().cursor(pymysql.cursors.DictCursor)
 
 		metrics_service = app.get_service('asab.MetricsService')
 		self.CacheCounter = metrics_service.create_counter("mysql.lookup", tags={}, init_values={'hit': 0, 'miss': 0})
 
 
 	def _find_one(self, database, key):
-		# sync, easy
-		# query = "SELECT * "
-		return database[self.Config['collection']].find_one({self.Config['key']:key})
+		query = "SELECT * FROM {} WHERE {}={}".format(self.Table, self.Key, key)
+		self.CursorSync.execute(query)
+		result = self.CursorSync.fetchone()
+		print('resuuuuult', result)
+		return {}
 
 	
 	async def _count(self, database):
 
 		query = """SELECT COUNT(*) as "Number of Rows" FROM {};""".format(self.Database)
-		await cur.execute(query)
-		count = await cur.fetchone()[0] #??????S
-		return count
+		await self.CursorAsync.execute(query)
+		count = await self.CursorAsync.fetchone()
+		print('coooooount', count)
+		return 1000500
 
 
 	async def load(self):
@@ -82,6 +88,16 @@ class ProjectLookup(bspump.mysql.MySQLLookup):
 
 
 	def __iter__(self):
-		database = self.Connection.Client[self.Database].delegate
-		collection = self.Config['collection']
-		return database[collection].find().__iter__()
+		query = query = "SELECT * FROM {}".format(self.Table)
+		self.CursorSync.execute(query)
+		result = self.CursorSync.fetchall()
+		self.Iterator = result.__iter__()
+		return self
+
+
+	def __next__(self):
+		element = next(self.Iterator)
+		key = element.get(self.Key)
+		if key is not None:
+			self.Cache[key] = element
+		return key
