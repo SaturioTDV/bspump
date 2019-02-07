@@ -17,14 +17,14 @@ class MyApplication(BSPumpApplication):
 
 		svc = self.get_service("bspump.PumpService")
 
-		es_connection = MongoDBConnection(self, "ElasticSearchConnection", config={
-			"url":"http://localhost:9200/"})
+		es_connection = ElasticSearchConnection(self, "ElasticSearchConnection", config={
+			"url":"http://10.199.158.120:9200/"})
 		
 		self.ElasticSearchLookup = ElasticSearchLookup(self, "ElasticSearchLookup", 
-			connection=es_connection,
+			es_connection=es_connection,
 			config={
-				'index':'users',
-				'field': 'location'
+				'index':'bs_cell_config_*',
+				'key': 'user'
 			})
 
 		svc.add_lookup(self.ElasticSearchLookup)
@@ -61,8 +61,6 @@ class MyProcessor(Processor):
 			event['L'] = info.get('L')
 		
 		return event
-
-
 
 
 if __name__ == '__main__':

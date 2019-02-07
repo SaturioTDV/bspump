@@ -1,5 +1,6 @@
 import abc
 import requests
+import json
 
 from ..abc.lookup import MappingLookup
 
@@ -25,7 +26,7 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 	ConfigDefaults = {
 		'index': '', # Specify an index
-		'key':'' # Specify field name to match
+		'key':'', # Specify field name to match
 		'scroll_timeout': '1m',
 	}
 
@@ -46,23 +47,24 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 	
 	def _find_one(self, key):
+		prefix = '_search'
 		request = {
+			"size": 1,
 			"query": {
-				"match" : {
-					self.Field : key
+				'match': {
+					self.Key:key
 				}
 			}
 		}
-		
-		response = requests.post(url+"/_search", json=request)
+		url = self.Connection.get_url() + '{}/{}'.format(self.Index, prefix)
+		response = requests.post(url, json=request)
 		data = json.loads(response.text)
-		hit = None
 		try:
 			hit = data['hits']['hits'][0]
-		except KeyError():
-			pass
+		except IndexError:
+			return None
 
-		return hit
+		return hit["_source"]
 
 	
 	async def _count(self):
@@ -73,7 +75,8 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 			}
 		}
 
-		url = self.Connection.get_url() + '{}/_search'.format(self.Index)
+		url = self.Connection.get_url() + '{}/{}'.format(self.Index, prefix)
+		
 		async with self.Connection.get_session() as session:
 			async with session.post(
 				url,
@@ -84,7 +87,7 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 				if response.status != 200:
 					data = await response.text() #!
 					L.error("Failed to fetch data from ElasticSearch: {} from {}\n{}".format(response.status, url, data))
-					break
+					
 
 				msg = await response.json()
 
@@ -120,7 +123,7 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 			}
 		}
 
-		all_hits = {}
+		all_hits = []
 		while True:
 			if scroll_id is None:
 				path = '{}/_search?scroll={}'.format(self.Index, self.ScrollTimeout)
@@ -130,24 +133,26 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 				request_body = {"scroll": self.ScrollTimeout, "scroll_id": scroll_id}
 
 			url = self.Connection.get_url() + path
-			response = requests.post(url+"/_search", json=request)
-			if response.status != 200:
+			response = requests.post(url, json=request_body)
+			
+			if response.status_code != 200:
 				data = response.text()
 				L.error("Failed to fetch data from ElasticSearch: {} from {}\n{}".format(response.status, url, data))
 				break
+			
 			data = json.loads(response.text)
 
-			scroll_id = msg.get('_scroll_id')
+			scroll_id = data.get('_scroll_id')
 			
 			if scroll_id is None:
 				break
 
-			hits = msg['hits']['hits']
+			hits = data['hits']['hits']
 			
 			if len(hits) == 0:
 				break
 			
-			all_hits.update(hits)
+			all_hits.extend(hits)
 		
 		self.Iterator = all_hits.__iter__()
 		return self
@@ -155,7 +160,8 @@ class ProjectLookup(bspump.elasticsearch.ElasticSearchLookup):
 
 	def __next__(self):
 		element = next(self.Iterator)
-		key = element.get(self.Key)
+
+		key = element['_source'].get(self.Key)
 		if key is not None:
-			self.Cache[key] = element
+			self.Cache[key] = element['_source']
 		return key
