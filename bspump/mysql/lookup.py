@@ -36,9 +36,6 @@ class ProjectLookup(bspump.mysql.MySQLLookup):
 		self.Table = self.Config['table']
 		self.Key = self.Config['key']
 
-		if len(self.Database) == 0:
-			self.Database = self.Connection.Database
-
 		self.Count = -1
 		self.Cache = {}
 
